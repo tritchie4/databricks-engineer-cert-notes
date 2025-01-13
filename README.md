@@ -17,32 +17,30 @@
 ### Spark = processing engine
 
 ### Databricks platform
-- Workspace - data engineering, data warehousing, ML
-  V
-- Runtime (spark)
-  V
+- Workspace - data engineering, data warehousing, ML, **then**
+- Runtime (spark), **then**
 - Cloud service: Uses cloud service of your choice to provision Cluster, which is preinstalled
 
 - Has a 
-  1) Control plane (web UI), workflows, notebooks, clusters
-   v
+  1) Control plane (web UI), workflows, notebooks, clusters, **then**
   2) Data plane (cluster VM's, storage (DBFS))
  (compute and storage in your own cloud account)
 
 So..
-Cluster has distributed file system (meaning it relies on external source for storage)
-Cloud storage has underlying data
+
+- Cluster has distributed file system (meaning it relies on external source for storage)
+- Cloud storage has underlying data
 
 
 ### Cluster
 
--Driver node coordinates the worker nodes and their execution
--Option is Multi node vs. Single node cluster (single just has driver)
--Multi node
+- Driver node coordinates the worker nodes and their execution
+- Option is Multi node vs. Single node cluster (single just has driver)
+- Multi node
 	- Access modes: single user (all languages supported), shared between users (JUST Python, SQL)
--Runtime is the image of the VM
--You can select the configuration separately for the worker and driver nodes
--Creating the cluster has Azure allocate the required VM's for you
+- Runtime is the image of the VM
+- You can select the configuration separately for the worker and driver nodes
+- Creating the cluster has Azure allocate the required VM's for you
 
 ### Notebook
 
@@ -67,6 +65,7 @@ Two types of files in storage:
 - Delta files - .json (from Delta Lake)
 
 ### Delta Lake
+
 - storage framework that brings reliability to data storage for data lakes
 - open-source technology, storage framework/layer (NOT a format), enabling building lakehouse
 - Delta Lake is on the Cluster
@@ -85,12 +84,11 @@ Two types of files in storage:
 
 ### Understanding Delta Tables (Hands On)
 
-`DESCRIBE HISTORY pets` -- show history of transactions on table
-`DESCRIBE DETAIL pets` -- shows table detail, can grab file system location
-`%fs ls 'dbfs:/user/hive/warehouse/pets'` -- show data and delta files
-`%fs ls 'dbfs:/user/hive/warehouse/pets/_delta_log' ` -- show delta files
-`%fs head 'dbfs:/user/hive/warehouse/pets/_delta_log/00000000000000000003.json'` -- Print delta file
-
+- `DESCRIBE HISTORY pets` -- show history of transactions on table
+- `DESCRIBE DETAIL pets` -- shows table detail, can grab file system location
+- `%fs ls 'dbfs:/user/hive/warehouse/pets'` -- show data and delta files
+- `%fs ls 'dbfs:/user/hive/warehouse/pets/_delta_log' ` -- show delta files
+- `%fs head 'dbfs:/user/hive/warehouse/pets/_delta_log/00000000000000000003.json'` -- Print delta file
 
 
 ### Advanced Delta Lake Concepts
@@ -112,19 +110,19 @@ Two types of files in storage:
 
 ### Apply Advanced Delta Lake Features (Hands On)
 
-`DESCRIBE HISTORY pets` -- show table history, includes versions, can query them!
+- `DESCRIBE HISTORY pets` -- show table history, includes versions, can query them!
 	- This uses the removed data files (marked as removed in the delta log)
-`SELECT * FROM pets@v3` -- query a past version of the table
-`SELECT * FROM pets VERSION AS OF 3` -- query a past version of the table
-`RESTORE TABLE pets TO VERSION AS OF 3` -- restore to a past version of the table
+- `SELECT * FROM pets@v3` -- query a past version of the table
+- `SELECT * FROM pets VERSION AS OF 3` -- query a past version of the table
+- `RESTORE TABLE pets TO VERSION AS OF 3` -- restore to a past version of the table
 	- Even the restore command shows up in the table history
-`OPTIMIZE pets ZORDER BY id` - Optimizes the table by id, removes pointer to data files (parquet files), adds new data file 
-`%fs ls "dbfs:/user/hive/warehouse/pets"` - List table data and delta files
-`VACUUM pets` - Actually *removes* old data files
-	-- But on its own, nothing happens, because default retention period is 7 days
-	-- `VACUUM pets RETENTION PERIOD 0 HOURS` will delete the files marked as "removed", beyond retention period of 0 hours
-	-- Now you can't time travel `SELECT * FROM pets@v1` because data files don't exist
-`DROP TABLE pets` would remove table and file system at that directory
+- `OPTIMIZE pets ZORDER BY id` - Optimizes the table by id, removes pointer to data files (parquet files), adds new data file 
+- `%fs ls "dbfs:/user/hive/warehouse/pets"` - List table data and delta files
+- `VACUUM pets` - Actually *removes* old data files
+	- But on its own, nothing happens, because default retention period is 7 days
+	- `VACUUM pets RETENTION PERIOD 0 HOURS` will delete the files marked as "removed", beyond retention period of 0 hours
+	- Now you can't time travel `SELECT * FROM pets@v1` because data files don't exist
+- `DROP TABLE pets` would remove table and file system at that directory
 
 
 ### Relational entities
@@ -152,15 +150,15 @@ Two types of files in storage:
 
 #### Tables
 
-Managed Tables
-- Created under the database (`/user/hive/warehouse`) directory
-- Default case
-- When you drop the table, underlying data files will be deleted
+- Managed Tables
+  - Created under the database (`/user/hive/warehouse`) directory
+  - Default case
+  - When you drop the table, underlying data files will be deleted
 
-External tables
-- Created outside of the database directory (using `LOCATION`)
-- When you drop an external table, the underlying data files will NOT be deleted
-- `USE db_abc; CREATE TABLE pets LOCATION 'dbfs:/mything/place/pets_table_thing'` will put table in `dbfs:/mything/place/pets_table_thing`
+- External tables
+  - Created outside of the database directory (using `LOCATION`)
+  - When you drop an external table, the underlying data files will NOT be deleted
+  - `USE db_abc; CREATE TABLE pets LOCATION 'dbfs:/mything/place/pets_table_thing'` will put table in `dbfs:/mything/place/pets_table_thing`
 
 - Therefore, if you configure it, you can have a custom database and custom table in different locations!
 	- Normally database controls tables (managed) but separately the tables are external
@@ -171,11 +169,14 @@ External tables
 #### Tables
 
 - Can describe location info about table using
-`DESCRIBE EXTENDED pets`
+  - `DESCRIBE EXTENDED pets`
 
-- An external table under the `default` DB is created with `CREATE TABLE pets_external
+- An external table under the `default` DB is created with 
+```
+CREATE TABLE pets_external
   (id INT, pet_name STRING, age INT)
-LOCATION 'dbfs:/tritchie_external/demo/pets_external';`
+LOCATION 'dbfs:/tritchie_external/demo/pets_external';
+```
 
 - Dropping the external table drops the table but doesn't remove the underlying files!
   - `%fs ls 'dbfs:/tritchie_external/demo/pets_external'` still has files, underlying directory is not managed by hive
@@ -195,6 +196,7 @@ USE tritchie_schema;
 CREATE table pets_managed;
 CREATE table pets_external LOCATION 'dbfs:/tritchie_external/pets';
 ```
+
 - Again as detailed in the Tables section above, dropping the tables means the data and delta files for the pets_managed table will be removed, and the files for pets_external will remain
 
 - Takeaway: Databases and Tables may have custom locations, a managed table is one that is created in its database directory (regardless of custom or default database), whereas extended table means it too has a custom location outside of its database directory - rubic's cube
@@ -245,10 +247,12 @@ CREATE table pets_external LOCATION 'dbfs:/tritchie_external/pets';
 
 - A virtual table with no actual data
 - A viewpoint into queried data from other tables
-	- `CREATE VIEW my_view
+```
+CREATE VIEW my_view
 	AS SELECT A1, A4, B2, B3
 	FROM table_1
-	INNER_JOIN table_2`
+	INNER_JOIN table_2
+```
 
 #### Types of Views
 
