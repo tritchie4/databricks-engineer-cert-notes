@@ -58,7 +58,6 @@ So..
 
 # Databricks Lakehouse Platform
 
-
 Two types of files in storage:
 
 - Data files - .parquet
@@ -72,11 +71,9 @@ Two types of files in storage:
 - Writes to Storage a Transaction Log - ordered records of every transaction on a table (think as bookmarks)
 - Spark checks the Transaction/Delta Log to receive data
 	- JSON file
-
 - Delta Lake creates a new file for updates
 - Will make further updates in a NEW file (parquet file) with those updates rather than updating existing data file it last created
 - The Delta Log is only concerned with the latest file
-
 - takeaway: Delta Lake guarantees that you will always get the most recent version of the data
 - Data log enables ACID transactions to object storage
 	Atomicity, Consistency, Isolation, Durability
