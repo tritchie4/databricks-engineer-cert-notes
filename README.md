@@ -20,14 +20,11 @@
 - Workspace - data engineering, data warehousing, ML, **then**
 - Runtime (spark), **then**
 - Cloud service: Uses cloud service of your choice to provision Cluster, which is preinstalled
-
 - Has a 
   1) Control plane (web UI), workflows, notebooks, clusters, **then**
   2) Data plane (cluster VM's, storage (DBFS))
  (compute and storage in your own cloud account)
-
 So..
-
 - Cluster has distributed file system (meaning it relies on external source for storage)
 - Cloud storage has underlying data
 
