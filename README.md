@@ -343,7 +343,7 @@ AS SELECT * FROM file_format.`path/to/file`
 CREATE TABLE table_name
 (col_name1 col_type1, ...)
 	USING CSV
-	OPTIONS (header = "true", delimeter = ";")
+	OPTIONS (header = "true", delimiter = ";")
 	LOCATION = 'dbfs:/my/loc/tablething.csv'
 ```
 - Better, explicit way: Registering Tables on External Data Sources
@@ -361,12 +361,69 @@ CREATE TABLE table_name
 		password = "pwd")
 ```
 - No guarantee of reading most recent version of data, no time travel
+- Workaround is to read it into a temporary view and then query temp view using CTAS statements
+```
+CREATE TEMP VIEW my_temp_view (col_name 1 INT, ...)
+	USING JDBC
+	OPTIONS (url = "jdbc:sqlite://hostname:port",
+		dbtable = "database.table",
+		user = "username",
+		password = "pwd")
 
+CREATE TABLE my_table
+AS SELECT * FROM my_temp_view
+```
+- Now we have a delta table!
 
 
 ### Querying Files (Hands On)
 
+```
+%python
+files = dbutils.fs.ls(f"{dataset_bookstore}/customers-json")
+display(files)
+```
+- This grabs Python `FileInfo` construct and displays it as table
+<br>
 
+- "SELECT input_file_name() src_file, * FROM json.\`dbfs:/mnt/demo-datasets/bookstore/customers-json\`"
+  - Can query a json file, but in this case its a directory
+  - Similar to `CREATE TABLE` from file above but this one is a SELECT
+  - Important to remember `input_file_name()` which will print the relevant file name for each row of data (we wouldn't normally know this because it's a directory we're looking at)
+<br>
+
+- "SELECT * FROM text.\`dbfs:/mnt/demo-datasets/bookstore/customers-json\`" returns it as text
+  - This is useful if data is corrupted and you need to extract the data after the fact to process it
+
+- "SELECT * FROM binaryFile.\`dbfs:/mnt/demo-datasets/bookstore/customers-json\`"
+	- Not "binaryData"!!
+	- Returns binary content, path, length, modification time of files
+
+- "SELECT * FROM csv.\`dbfs:/mnt/demo-datasets/bookstore/books-csv\`"
+	- **Issue**: This CSV is ; separated, you must specify that in a CREATE TABLE with an OPTIONS key/value or it will not interpret correctly
+
+```
+CREATE TABLE books_csv_correct
+(book_id STRING,title STRING,author STRING,category STRING,price DOUBLE)
+	USING CSV
+	OPTIONS (header = "true", delimiter = ";")
+	LOCATION "${dataset.bookstore}/books-csv"
+```
+- You can then select from this table to view all the records correctly
+- This table data is being referenced as an external table, driven by the CSV file data!
+	- No delta table benefits, such as guarantee of referencing latest data
+- You could add data to the csv file or add a csv file, pull data from the table, and it wouldn't show updated results in your query
+- This is because Spark caches the underlying data in local storage to ensure performance
+	- Again no delta table benefits, not guaranteed of referencing latest data
+	- To mitigate this, you can use `REFRESH TABLE books_csv` which invalidates the cache and pulls the csv data back into memory again, which for a large dataset can take a long time!
+<br>
+
+- Moving backwards...
+```
+CREATE TABLE customers AS
+SELECT * FROM json.\`${dataset.bookstore}/customers-json\`;
+```
+- The CTAS way (which is useful for json, not csv) creates a managed, delta table with inferred columns
 
 
 ### Writing to Tables (Hands On)
