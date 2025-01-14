@@ -65,18 +65,20 @@ Two types of files in storage:
 
 ### Delta Lake
 
+- Operates using Spark
+  - You interact with Delta Lake tables most commonly through Spark SQL or Spark DataFrames within a Spark environment
 - storage framework that brings reliability to data storage for data lakes
 - open-source technology, storage framework/layer (NOT a format), enabling building lakehouse
 - Delta Lake is on the Cluster
 - Writes to Storage a Transaction Log - ordered records of every transaction on a table (think as bookmarks)
 - Spark checks the Transaction/Delta Log to receive data
-	- JSON file
+  - JSON file
 - Delta Lake creates a new file for updates
 - Will make further updates in a NEW file (parquet file) with those updates rather than updating existing data file it last created
 - The Delta Log is only concerned with the latest file
 - takeaway: Delta Lake guarantees that you will always get the most recent version of the data
 - Data log enables ACID transactions to object storage
-	Atomicity, Consistency, Isolation, Durability
+  - Atomicity, Consistency, Isolation, Durability
 - Audit trail of all changes
 
 ### Delta Tables vs Non-Delta Tables
