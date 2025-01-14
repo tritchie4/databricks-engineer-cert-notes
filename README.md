@@ -235,7 +235,7 @@ CREATE table pets_external LOCATION 'dbfs:/tritchie_external/pets';
 		- Can take a long time for a large dataset
 		- A complete separate copy of an original table
 	- Shallow clone
-		- Reference to original table
+		- Reference to original table, think of it as a snapshot
 		- No original table history
 		- Storage efficient since there's just one source of truth for data (original table), UNTIL shallow clone is modified
 		- Independent once copied! 
