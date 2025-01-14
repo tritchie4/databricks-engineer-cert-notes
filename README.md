@@ -216,23 +216,18 @@ CREATE table pets_external LOCATION 'dbfs:/tritchie_external/pets';
 - Infer schema info from query results, cannot manually specify schema info
 - Can rename columns as you do this
 - Can also specify things like a comment, partition (on columns), and location
-
 - Comment
 	- Description of the table
-
 - Partitioning
 	- Large tables only benefit from partitions
 	- Generally, as good practice, you don't want to partition
-
 - Location
 	- Remember LOCATION above to create an external table
-
 - Table Constraints
 	- NOT NULL and CHECK constraints
 	- When applying these, there must not be any data that already violates them
 	- `ALTER TABLE table_1 ADD CONSTRAINT valid_date CHECK (date > '2025-01-01')`
 	- `ALTER TABLE table_1 ADD CONSTRAINT valid_date CHECK (date IS NOT NULL)`
-
 - Cloning delta lake tables
 	- Deep clone 
 		- Fully copies data + metadata from a source to target
@@ -245,7 +240,6 @@ CREATE table pets_external LOCATION 'dbfs:/tritchie_external/pets';
 		- Storage efficient since there's just one source of truth for data (original table), UNTIL shallow clone is modified
 		- Independent once copied! 
 	- In either case, data modifications will not affect the source
-
 
 ### Views
 
@@ -299,7 +293,6 @@ AS SELECT *
 ```
 - Note that when you run `SHOW TABLES`, it comes back with `isTemporary` true, and there isn't a database of default
 - It will show up with any `SHOW TABLES` command, including `SHOW TABLES IN xyz` where xyz is a custom database
-
 - Creating global temp view (cluster-level)
 ```
 CREATE GLOBAL TEMP VIEW 2023_smartphones
@@ -309,7 +302,6 @@ AS SELECT *
 ```
 - To query it, *remember* you must use `global_temp.2023_smartphones` as `global_temp` is the special database for these
 - You must use `SHOW TABLES IN global_temp` to show tables
-
 - Creating a new notebook will run a new session, the temp view (#2 above) will not exist if you call `SHOW TABLES`
 	- Global temp view would still exist
 
