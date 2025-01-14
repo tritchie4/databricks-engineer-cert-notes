@@ -82,6 +82,14 @@ Two types of files in storage:
 	Atomicity, Consistency, Isolation, Durability
 - Audit trail of all changes
 
+### Delta Tables vs Non-Delta Tables
+
+#### Delta Tables
+- Guarantee of reading most recent version of data, time travel
+
+#### Non-Delta tables
+- No guarantee of reading most recent version of data, no time travel
+
 ### Understanding Delta Tables (Hands On)
 
 - `DESCRIBE HISTORY pets` -- show history of transactions on table
@@ -312,7 +320,77 @@ AS SELECT *
 
 # ELT with Spark SQL and Python
 
+### Querying Files
 
+- Extracting data from files
+- "SELECT * FROM file_format.\`/path/to/file\`"
+	- file_format
+		- useful for self-describing formats: json, parquet, etc.
+	  - Not as useful for non-self-describing formats: csv, tsv, etc.
+	  - Also `text` for text based files (json, tsv, txt, etc) to extract as raw strings
+	- Can specify single file, wildcard * files, or whole directory (assuming same format/schema)
+	- "SELECT * FROM json.\`/path/file_name.json\`"
+	- "SELECT * FROM csv.\`/path/file_name.json\`"
+	- "SELECT * FROM text.\`/path/file_name.json\`" + logic to extract text
+	- "SELECT * FROM binaryFile.\`/path/file_name.png\`" for images or unstructured data
+
+#### Iffy way
+
+- Can combine this with CTAS, to load data into the lakehouse
+```
+CREATE TABLE table_name
+AS SELECT * FROM file_format.`path/to/file`
+```
+- Iffy way: Query files + CTAS
+	- Querying data from files directly, loading into the lakehouse
+	- Again for CTAS, schema info is automatically inferred
+	- File should generally have a well-defined schema
+	- Again, best for self-describing formats: json, parquet, etc.
+	- Does not support specifying additional file options
+	- Therefore, this statement poses significant limitations when trying to ingest data from files like CSV's
+
+#### Better Way
+
+```
+CREATE TABLE table_name
+(col_name1 col_type1, ...)
+	USING CSV
+	OPTIONS (header = "true", delimeter = ";")
+	LOCATION = 'dbfs:/my/loc/tablething'
+```
+- Better, explicit way: Registering Tables on External Data Sources
+	- External table
+	- Non-Delta table!
+
+```
+CREATE TABLE table_name
+(col_name1 col_type1, ...)
+	USING JDBC
+	OPTIONS (url = "jdbc:sqlite://hostname:port",
+		dbtable = "database.table",
+		user = "username",
+		password = "pwd")
+```
+- No guarantee of reading most recent version of data, no time travel
+
+
+
+### Querying Files (Hands On)
+
+
+
+
+### Writing to Tables (Hands On)
+
+
+
+
+### Advanced Transformations (Hands On)
+
+
+
+
+### Higher Order Functions and SQL UDFs (Hands On)
 
 
 
