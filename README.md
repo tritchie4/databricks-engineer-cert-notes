@@ -124,7 +124,7 @@ Two types of files in storage:
 - `%fs ls "dbfs:/user/hive/warehouse/pets"` - List table data and delta files
 - `VACUUM pets` - Actually *removes* old data files
 	- But on its own, nothing happens, because default retention period is 7 days
-	- `VACUUM pets RETENTION PERIOD 0 HOURS` will delete the files marked as "removed", beyond retention period of 0 hours
+	- `VACUUM pets RETAIN 0 HOURS` will delete the files marked as "removed", beyond retention period of 0 hours
 	- Now you can't time travel `SELECT * FROM pets@v1` because data files don't exist
 - `DROP TABLE pets` would remove table and file system at that directory
 
