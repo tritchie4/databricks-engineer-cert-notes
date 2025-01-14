@@ -344,11 +344,12 @@ CREATE TABLE table_name
 (col_name1 col_type1, ...)
 	USING CSV
 	OPTIONS (header = "true", delimeter = ";")
-	LOCATION = 'dbfs:/my/loc/tablething'
+	LOCATION = 'dbfs:/my/loc/tablething.csv'
 ```
 - Better, explicit way: Registering Tables on External Data Sources
 	- External table
 	- Non-Delta table!
+ - Creates a table schema that points to the data stored at the given location. Querying the table reads from the CSV file at runtime.
 
 ```
 CREATE TABLE table_name
