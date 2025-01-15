@@ -90,6 +90,7 @@ Two types of files in storage:
 
 - `DESCRIBE HISTORY pets` -- show history of transactions on table
 - `DESCRIBE DETAIL pets` -- shows table detail, can grab file system location
+- `DESCRIBE EXTENDED` -- shows all table metadata
 - `%fs ls 'dbfs:/user/hive/warehouse/pets'` -- show data and delta files
 - `%fs ls 'dbfs:/user/hive/warehouse/pets/_delta_log' ` -- show delta files
 - `%fs head 'dbfs:/user/hive/warehouse/pets/_delta_log/00000000000000000003.json'` -- Print delta file
@@ -400,8 +401,12 @@ display(files)
 	- Returns binary content, path, length, modification time of files
 
 - "SELECT * FROM csv.\`dbfs:/mnt/demo-datasets/bookstore/books-csv\`"
-	- **Issue**: This CSV is ; separated, you must specify that in a CREATE TABLE with an OPTIONS key/value or it will not interpret correctly
 
+#### Issue 
+
+This CSV is ; separated, you must specify that in a CREATE TABLE with an OPTIONS key/value or it will not interpret correctly
+
+#### Solution 1 - Creates External, Non-Delta table with correct data from CSV
 ```
 CREATE TABLE books_csv_correct
 (book_id STRING,title STRING,author STRING,category STRING,price DOUBLE)
@@ -418,22 +423,93 @@ CREATE TABLE books_csv_correct
 	- To mitigate this, you can use `REFRESH TABLE books_csv` which invalidates the cache and pulls the csv data back into memory again, which for a large dataset can take a long time!
 <br>
 
-- Moving backwards...
+- **Reminder**...
 ```
 CREATE TABLE customers AS
 SELECT * FROM json.\`${dataset.bookstore}/customers-json\`;
 ```
 - The CTAS way (which is useful for json, not csv) creates a managed, delta table with inferred columns
 
+#### Solution 2 - Creates Managed, Delta Table with correct data from CSV
+```
+CREATE TEMP VIEW books_csv_vw
+(book_id STRING,title STRING,author STRING,category STRING,price DOUBLE)
+USING CSV
+OPTIONS(
+	header = "true", delimiter = ";", path= "${dataset.bookstore}/books-csv/export_*.csv"
+)
+
+CREATE TABLE books AS
+  SELECT * FROM books_csv_vw
+
+SELECT * FROM books
+```
+- We make a temp view first, note the syntax differences in making temp view with options vs making the table with using + options
+- We make a table from the temp view
 
 ### Writing to Tables (Hands On)
 
+- CTAS creates a managed delta table
 
+#### Overwriting
+
+- Overwriting a table is faster and preserves history rather than recreating
+- So instead of DROP + CREATE, use...
+  1. `CREATE OR REPLACE TABLE blah AS SELECT...` - CRAS statement
+  	- This overwrites the data and structure (table schema - cols, etc) as sourced
+  2. `INSERT OVERWRITE table_name SELECT...`
+  	- Note theres no `AS`
+  	- This overwrites the data, but not the table structure
+  	- If you try an `INSERT OVERWRITE` with different columns (`AS SELECT *, current_timestamp()`) it will throw a schema mismatch error
+
+#### Appending
+
+- Simple insert, will insert duplicates
+	- "INSERT INTO blah SELECT * FROM parquet.\`${dataset.bookstore}/orders-new\`" -
+- Insert without inserting duplicates will involve a merge
+	- You pull from a dataset as normal, but into a temp view since the `MERGE INTO` command takes a table or view
+```sql
+CREATE OR REPLACE TEMP VIEW customers_updates AS
+SELECT * FROM json.\`${dataset.bookstore}/customers-json-new\`
+
+MERGE INTO customers c
+USING customers_updates u
+ON c.customer_id = u.customer_id
+WHEN MATCHED AND c.email IS NULL AND u.email IS NOT NULL THEN
+  UPDATE SET email = u.email, updated = u.updated
+WHEN NOT MATCHED THEN INSERT *
+```
+- Match is done on criteria in `ON`
+- updates, inserts and deletes are completed in a single atomic action, merge is a great solution for inserting while avoiding duplicates
 
 
 ### Advanced Transformations (Hands On)
 
+`SELECT * FROM customers` returns string `profile` column with `{"first_name":"Susana","last_name":"Gonnely","gender":"Female","address":{"street":"760 Express Court","city":"Obrenovac","country":"Serbia"}}`
 
+- With Spark SQL, you can run `SELECT profile:first_name FROM customers` to select a key of this string
+- Colon notation for addressing keys and nested keys! 
+
+#### JSON Structs
+- Spark object type with nested attributes
+
+```sql
+CREATE OR REPLACE TEMP VIEW parsed_customers AS
+  SELECT customer_id, from_json(profile, schema_of_json('{"first_name":"Thomas","last_name":"Lane","gender":"Male","address":{"street":"06 Boulevard Victor Hugo","city":"Paris","country":"France"}}')) 
+  	AS profile_struct
+  FROM customers;
+
+SELECT * FROM parsed_customers
+```
+- We can read in JSON string (`profile` in this case) as an object to be traversed, using `from_json`, but it needs a template, `schema_of_json`
+- You can interact with the nested JSON object in the DBX results view
+- You can select attributes of the `profile_struct`, such as `SELECT profile_struct.first_name FROM parsed_customers`!
+<br>
+- Selecting `profile_struct` on its own returns the complex object
+- Selecting `profile_struct.first_name` selects the values for that key
+- Selecting `profile_struct.*` will pull all JSON keys as columns! 
+
+#### Explode
 
 
 ### Higher Order Functions and SQL UDFs (Hands On)
