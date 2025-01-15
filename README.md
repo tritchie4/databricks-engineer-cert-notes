@@ -763,13 +763,13 @@ streamDF.table("Temp_Input_Table_View")
 <br>
 
 - `.table("Output_Table")` -- 
+<br>
 
 - Benefits
 	- Fault tolerance
 		- Streaming agent can resume from where it left off - it uses write-ahead logs to record offset range of data being processed during each trigger interval, for tracking stream progress
 	- Data processing guaranteed to happen exactly-once, streaming sinks are idempotent
 		- Assumes repeatable datasource (like cloud)
-
 - Unsupported
 	- Sorting
 	- Deduplication 
@@ -915,7 +915,11 @@ SELECT * FROM author_counts_temp_vw
 - Idea is that structure and quality of data is incrementally improved as it flows through each layer of the architecture
 <br>
 
+![image](https://github.com/user-attachments/assets/6ac8bedd-6264-4afb-a5a5-037ee072686d)
 
+Bronze, Silver, Gold Arch
+
+- Test
 
 ### Multi-hop Architecture (Hands On)
 
