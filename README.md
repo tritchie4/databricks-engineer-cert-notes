@@ -350,6 +350,7 @@ CREATE TABLE table_name
 - Better, explicit way: Registering Tables on External Data Sources
 	- External table
 	- Non-Delta table!
+	- **Remember: if there's a LOCATION, it's a non-delta table**
  - Creates a table schema that points to the data stored at the given location. Querying the table reads from the CSV file at runtime.
 
 ```
@@ -401,10 +402,11 @@ display(files)
 	- Returns binary content, path, length, modification time of files
 
 - "SELECT * FROM csv.\`dbfs:/mnt/demo-datasets/bookstore/books-csv\`"
+  - Returns all csv data in one table, cols must be consistent or it will throw an error
 
 #### Issue 
 
-This CSV is ; separated, you must specify that in a CREATE TABLE with an OPTIONS key/value or it will not interpret correctly
+This CSV is ; separated, you must specify that in a CREATE TABLE with an OPTIONS key/value or it will not interpret correctly.  You can't use OPTIONS with a SELECT statement!
 
 #### Solution 1 - Creates External, Non-Delta table with correct data from CSV
 ```
@@ -505,38 +507,412 @@ SELECT * FROM parsed_customers
 - You can interact with the nested JSON object in the DBX results view
 - You can select attributes of the `profile_struct`, such as `SELECT profile_struct.first_name FROM parsed_customers`!
 <br>
+
 - Selecting `profile_struct` on its own returns the complex object
 - Selecting `profile_struct.first_name` selects the values for that key
-- Selecting `profile_struct.*` will pull all JSON keys as columns! 
+- Selecting `profile_struct.*` will pull all JSON keys as columns! (first level keys as column headers, first level keys' values as cells)
 
-#### Explode
+#### Arrays
 
+- A column has an array value with struct type [{"book_id": "B09", "quantity":2}]
+
+##### explode
+
+- Puts each element of an array into its own row
+- `SELECT id, explode(books) AS book FROM orders`
+	- This will return multiple records of the same id, each record having an element of books array (hence explode name)
+
+##### collect_set and others
+
+- `SELECT customer_id, collect_set(order_id), collect_set(books.book_id) FROM orders GROUP BY customer_id`
+	- order_id is a number, `4` - many of these records for `customer_id`
+	- books is an array of structs `[{"book_id":"B09","quantity":2,"subtotal":48}, {...}]`
+	- books.book_id is a string
+	- `collect_set` will collect these into a set for each `customer_id` -
+	`["4","7","8"] and [["B08","B02"],["B09"],["B03","B12"]]`
+		- **must** use GROUP BY on the `customer_id` for it to be grouped by customer id
+
+- Can use `flatten` to dissolve/merge the sub arrays into one for the books.book_id
+- Can use `array_distinct` to remove dupes
+	- Given: `[["B08","B02"],["B09"],["B09","B12"]]`
+	- `SELECT customer_id, collect_set(order_id), array_distinct(flatten(collect_set(books.book_id))) FROM orders GROUP BY customer_id`
+	- After: `["B08","B02","B09","B12"]`
+
+#### Join Operations
+
+- Inner, outer, left, right, anti, cross, and semi joins
+- **Let's see if this is worth learning**
+
+```sql
+CREATE OR REPLACE VIEW orders_enriched AS
+SELECT *
+FROM (
+  SELECT *, explode(books) AS book 
+  FROM orders) o
+INNER JOIN books b
+ON o.book.book_id = b.book_id;
+
+SELECT * FROM orders_enriched
+```
+- `o` returns order_id, order_timestamp, etc. from the orders table along with an exploded array (`[{"book_id":104, ...}, {"book_id":104, ...}]` becomes {"book_id":104, ...}, {"book_id":104, ...} in separate columns)
+- Then from `books`, for each book we grab the title, author name, and category, all the columns
+- Match the two on `book_id`
+
+#### Set Operations - Union and Intersect
+
+- First...
+
+```
+CREATE OR REPLACE TEMP VIEW orders_updates
+AS SELECT * FROM parquet.`${dataset.bookstore}/orders-new`;
+```
+
+- Union - returns combined tables
+
+```sql
+SELECT * FROM orders 
+UNION 
+SELECT * FROM orders_updates 
+```
+
+- Intersect - 
+
+	- Returns all records found in both relations
+
+```sql
+SELECT * FROM orders 
+INTERSECT 
+SELECT * FROM orders_updates 
+```
+
+- Minus - 
+
+	- First dataset MINUS the second dataset (so new elements in the second dataset actually wont be in the results)
+
+```sql
+SELECT * FROM orders 
+MINUS 
+SELECT * FROM orders_updates 
+```
+
+- Pivot
+
+	- Beats me
+
+```sql
+CREATE OR REPLACE TABLE transactions AS
+
+SELECT * FROM (
+  SELECT
+    customer_id,
+    book.book_id AS book_id,
+    book.quantity AS quantity
+  FROM orders_enriched
+) PIVOT (
+  sum(quantity) FOR book_id in (
+    'B01', 'B02', 'B03', 'B04', 'B05', 'B06',
+    'B07', 'B08', 'B09', 'B10', 'B11', 'B12'
+  )
+);
+
+SELECT * FROM transactions
+```
 
 ### Higher Order Functions and SQL UDFs (Hands On)
 
+- Allow you to work directly with hierarchical data like arrays and map type objects
+	- Like the value of the books column, an array of structs 
+	- `[{"book_id":"B09","quantity":2,"subtotal":48}, {...}]`
+
+#### Filter function
+
+- Filters using a lambda function
+
+```sql
+SELECT order_id, books, FILTER (books, book -> book.quantity >= 2) AS multiple_copies
+FROM orders
+```
+- Think of it like a foreach loop! Each book is a struct with attributes
+- Returns an array
+
+#### WHERE clause
+
+- The query above will result in empty records where the FILTER is not matched, can wrap the whole call as a subquery into another SELECT with a WHERE clause
+
+```sql
+SELECT * FROM (
+	SELECT order_id, books, FILTER (books, book -> book.quantity >= 2) AS multiple_copies
+	FROM orders
+) 
+WHERE size(multiple_copies) > 0;
+```
 
 
+#### TRANSFORM function
+
+```sql
+SELECT 
+	order_id, 
+	books, 
+	TRANSFORM (
+		books,
+		b -> CAST(b.subtotal * 0.8 AS INT)
+		) AS subtotal_after_discount
+	FROM orders
+```
+
+- For each book (again.. foreach concept), we are applying an operation to each subtotal
 
 
+#### User-defined Functions
 
+- You can create a function called get_url) that accepts a string email, returns a string, and returns a concated string
 
+```
+CREATE OR REPLACE FUNCTION get_url(email STRING)
+RETURNS STRING
 
+RETURN concat("https://www.", split(email, "@")[1])
+```
 
+```
+SELECT email, get_url(email) domain
+FROM customers
+```
+- Returns email: test@blogger.com and domain: https://www.blogger.com
+- These are permanent members of databases, so you can reuse them in different Spark sessions and notebooks!
 
+- `DESCRIBE FUNCTION get_url` -- returns info about function
+- `DESCRIBE FUNCTION EXTENDED get_url` -- returns more info about function, even body of function itself
 
+- More complex function
+
+```
+CREATE FUNCTION site_type(email STRING)
+RETURNS STRING
+RETURN CASE 
+          WHEN email like "%.com" THEN "Commercial business"
+          WHEN email like "%.org" THEN "Non-profits organization"
+          WHEN email like "%.edu" THEN "Educational institution"
+          ELSE concat("Unknow extenstion for domain: ", split(email, "@")[1])
+       END;
+```
+
+- Evaluated natively in Spark so it is optimized for parallel execution
 
 
 # Incremental Data Processing
 
+### Structured Streaming
+
+- What a data stream is, how to process streaming data using Spark structured streaming
+- Use DataStreamReader to perform a stream read from a source
+- Use DataStreamWriter to perform a streaming write to a sink
+
+#### Data Stream
+
+- Involve real time generation and ingestion of data
+- Use Cases
+	- New files landing in cloud storage
+	- Updates to a DB captured in a Change Data Capture feed
+	- Events queued in a pub/sub messaging feed
+
+- Processing is done 2 ways
+	1. Reprocess entire source dataset each time
+	2. Only process thse new data added since last update
+		- Structured Streaming 
+
+#### Spark Structured Streaming
+
+- Takes data from infinite data source and puts it incrementally into a data sink
+- The data source is treated as a table
+- Data sink is a durable file system - files and tables
+
+- **More Details**
+- **Note the below is for stream from a table**
+- Infinite Data Source
+	- Treat it as a table
+	- Spark Structured Streaming allows user to interact with data source as if structured table of records
+	- New data are represented as new rows in the table
+	- This special table, representing an infinite data source, is called an "unbounded table"
+
+- In Python, you can read a stream and write the data to the file system
+```python
+streamDf = spark.readStream
+						.table("Input_Table")
+
+streamDF.table("Temp_Input_Table_View")
+			.writeStream
+			.trigger(processingTime="2 minutes")
+			.outputMode("append")
+			.option("checkpointLocation", "/path")
+			.table("Output_Table")
+```
+<br>
+
+- `.trigger(processingTime="2 minutes")` -- How often to process the data (default every half second)
+- `.trigger(once=True)` -- process all available data in a single batch, then stop
+- `.trigger(availableNow=True)` -- process all available data in micro batches, then stop
+<br>
+
+- `.outputMode("append")` -- Incrementally increment new rows to the target table with each batch
+- `.outputMode("complete")` -- Overwrite the entire target table with each batch
+<br>
+
+- `.option("checkpointLocation", "/path")` -- Allows stream to be tracked, cannot share these across streams!
+<br>
+
+- `.table("Output_Table")` -- 
+
+- Benefits
+	- Fault tolerance
+		- Streaming agent can resume from where it left off - it uses write-ahead logs to record offset range of data being processed during each trigger interval, for tracking stream progress
+	- Data processing guaranteed to happen exactly-once, streaming sinks are idempotent
+		- Assumes repeatable datasource (like cloud)
+
+- Unsupported
+	- Sorting
+	- Deduplication 
+
+### Structured Streaming (Hands on)
+
+#### ReadStream
+```python
+(spark.readStream
+    .table("books")
+    .createOrReplaceTempView("books_streaming_tmp_vw"))
+```
+- Temp view created here is a "streaming temporary view"
+- Does NOT continuously run, establishes a built in streaming temp view that will auto populate from the books table
+
+```
+%sql
+SELECT * FROM books_streaming_tmp_vw
+```
+- This gives us a streaming result and leaves the connection open, which we don't use unless monitoring
+- Reminder, some operations aren't supported - Sorting (`ORDER BY`) and deduplication
+- If you create another temporary view from this streaming temp view, that new temp view will also be a streaming type
+
+#### WriteStream
+
+```sql
+%sql
+CREATE OR REPLACE TEMP VIEW author_counts_temp_vw AS (
+  SELECT author, count(book_id) AS total_books
+  FROM books_streaming_tmp_vw
+  GROUP BY author
+);
+SELECT * FROM author_counts_temp_vw
+```
+- Doing this because this example using "complete" `outputMode` below requires an aggregate function, so we take table from readstream and read it into a view using aggregate function
+
+```python
+(spark.table("author_counts_temp_vw")
+	.writeStream
+	.trigger(processingTime='4 seconds')
+	.outputMode("complete")
+	.option("checkpointLocation", "dbfs:/mnt/demo/books_streaming_checkpoint")
+	.table("author_counts"))
+```
+
+- The table/view referenced must be a streaming table (one created using `readStream`)
+- `complete` mode to completely overwrite the output table
+	- **THIS ONLY WORKS** if aggregate function was used in the query to make the temp view
+- Back in the read, you have to read it as a stream (streaming dataframe object) to do incremental writing
+	- In other words, read/write needs to be consistent
+- Running this leaves the connection open
+- **Now, if you insert something into the books table the internal mechanism will put the record in the books streaming temp view, which goes to the author streaming temp view, which is written to the author_counts table by the open `writeStream` command**
+<br>
+
+- Remember to cancel streams, or cluster will remain on
+<br>
+
+- One more example, in this case the stream is stopped and we insert 3 records into `books`
+- Then...
+```python
+(spark.table("author_counts_temp_vw")
+	.writeStream
+	.trigger(availableNow=True)
+	.outputMode("complete")
+	.option("checkpointLocation", "dbfs:/mnt/demo/books_streaming_checkpoint")
+	.table("author_counts"))
+	.awaitTermination()
+```
+- We use the `availableNow=True` trigger to take all records and insert them in one batch, and will stop on its own after execution
+- Reminder that outputMode "complete" will overwrite the entire target table
+- `awaitTermination` blocks the thread to run sync until this has finished
+
+### Incremental Data Ingestion
+
+- **The above was for loading from a table, this is for loading from a file**
+- Loading new data files encountered since last ingestion
+- Reduces redundant processing
+
+#### COPY INTO
+
+- `COPY INTO` -- SQL command that allows users to load data from a file location into a Delta table
+- Will only load new files from the source location, skipping already-loaded files
+
+#### Auto Loader
+
+- uses Structured Streaming to efficiently process data files as they arrive in storage
+	- Load billions of files
+	- Near real-time ingestion of millions of files per hour
+- since it uses Spark Structured Streaming it includes checkpointing to store metadata of discovered files
+- Ensures data files are processed exactly once
+- Resume from where it left off
+- Once again use the `readStream` and `writeStream` methods (see example in Hands On section)
+
+#### How to Decide
+
+- Copy Into
+	- Thousands of files
+	- Less efficient at scale
+
+- Auto Loader
+	- Millions of files
+	- Efficient at scale (multiple batches)
+	- General best practice approach
+
+### Auto Loader (Hands On)
+
+- Our datasource directory will be `dbfs:/mnt/demo-datasets/bookstore/orders-raw/01.parquet`
+- We'll use Auto Loader to read files in this directory and detect new ones as they arrive to put them into a target table
+
+```python
+(spark.readStream
+        .format("cloudFiles")
+        .option("cloudFiles.format", "parquet")
+        .option("cloudFiles.schemaLocation", "dbfs:/mnt/demo/orders_checkpoint")
+        .load(f"{dataset_bookstore}/orders-raw")
+      .writeStream
+        .option("checkpointLocation", "dbfs:/mnt/demo/orders_checkpoint")
+        .table("orders_updates")
+)
+```
+- `cloudFiles` indicates that this is an Auto Loader stream of files
+- `cloudFiles.format` specifies file format
+- `cloudFiles.schemaLocation` -- auto loader stores the information of the inferred schema
+- `load` -- location of our datasource files
+- `writeStream` writes data into a target table
+- Reminder that checkpointLocation tracks the load process
+<br>
+
+- When running and after, you can select from the table and perform other SQL operations on it!
+- As new files are loaded to the source directory, the Auto Loader stream (assuming it is still running) will pick up the new files in the source directory and write them to the table
+<br>
+
+- `DESCRIBE HISTORY orders_updates` shows an `operation` value of `STREAMING UPDATE` for this operation.  This `operation` value always seems to be very indicative of what happened!
+
+### Multi-hop Architecture
+
+- What the incremental Multi-Hop pipeline is
+- Describe Bronze, Silver, and Gold tables
+<br>
 
 
 
-
-
-
-
-
-
+### Multi-hop Architecture (Hands On)
 
 
 
