@@ -729,7 +729,7 @@ RETURN CASE
 - Data sink is a durable file system - files and tables
 
 - **More Details**
-- **Note the below is for stream from a table**
+- **Note the below is for streaming from a table**
 - Infinite Data Source
 	- Treat it as a table
 	- Spark Structured Streaming allows user to interact with data source as if structured table of records
@@ -906,8 +906,13 @@ SELECT * FROM author_counts_temp_vw
 
 ### Multi-hop Architecture
 
+- AKA "Medallion Architecture"
 - What the incremental Multi-Hop pipeline is
 - Describe Bronze, Silver, and Gold tables
+<br>
+
+- Organize data in a multi-layered approach
+- Idea is that structure and quality of data is incrementally improved as it flows through each layer of the architecture
 <br>
 
 
