@@ -856,6 +856,7 @@ SELECT * FROM author_counts_temp_vw
 #### Auto Loader
 
 - uses Structured Streaming to efficiently process data files as they arrive in storage
+- `cloudFiles` (see below) == Auto Loader!
 	- Load billions of files
 	- Near real-time ingestion of millions of files per hour
 - since it uses Spark Structured Streaming it includes checkpointing to store metadata of discovered files
@@ -919,11 +920,157 @@ SELECT * FROM author_counts_temp_vw
 
 Bronze, Silver, Gold Arch
 
-- Test
+- Bronze table contains raw data from json files, operational databases, or Kafka stream
+- Silver table offers more refined view of data, fields are joined to enrich silver records
+- Gold table provides business-level aggregations, used for reporting or dashboarding or machine learning
+<br>
+
+#### Benefits
+- Simple data model
+- Enables incremental ETL
+- Combine streaming and batch workloads in the unified pipeline
+	- Each stage can be configured as a batch or streaming job
+- Can recreate your tables from raw data at any time
 
 ### Multi-hop Architecture (Hands On)
 
+- First, we use the same file system from before, but this time more files, 3 parquet files in the `orders-raw` directory
 
+1. Get an Auto Loader going to read a stream into a temp view:
+
+```python
+(spark.readStream
+        .format("cloudFiles")
+        .option("cloudFiles.format", "parquet")
+        .option("cloudFiles.schemaLocation", "dbfs:/mnt/demo/orders_raw")
+        .load(f"{dataset_bookstore}/orders-raw")
+      	.createOrReplaceTempView("orders_raw_temp")
+)
+```
+- Reminder: will run and finish (not stay open)
+
+2. Enrich data with current timestamp of ingestion and source file name, create another streaming temp table
+
+```sql
+CREATE OR REPLACE TEMPORARY VIEW orders_tmp AS (
+	SELECT *, current_timestamp() arrival_time, input_file_name() source_file
+	FROM orders_raw_temp
+)
+```
+
+3. Selecting from the `orders_tmp` table will open a stream because this was created from a streaming temp table, has new columns
+<br>
+
+- Time to start the table layers, remember, each one results in a *table*
+
+#### Bronze Table
+
+4. Running the below using the PySpark API to process an incremental write to a Delta Lake Table, `orders_bronze`
+
+```python
+(spark.table("orders_tmp")
+      .writeStream
+      .format("delta")
+      .option("checkpointLocation", "dbfs:/mnt/demo/checkpoints/orders_bronze")
+      .outputMode("append")
+      .table("orders_bronze"))
+```
+
+#### Silver Table
+
+5. Setup for this example, read customer data into temp view for combination later
+
+```python
+(spark.read
+      .format("json")
+      .load(f"{dataset_bookstore}/customers-json")
+      .createOrReplaceTempView("customers_lookup"))
+```
+
+5. Create a streaming temporary view against our bronze table
+
+```python
+(spark.readStream
+  .table("orders_bronze")
+  .createOrReplaceTempView("orders_bronze_tmp"))
+```
+- This is because later, we will call `.writeStream` which can only be done on a streaming dataframe, therefore we will reference streaming temp view `orders_bronze_tmp` in the next query rather than the original bronze table
+
+6. Then, create a streaming data-enriched/combined temporary view from our bronze temporary view combined with the streaming temp view of customers we have
+
+```sql
+%sql
+CREATE OR REPLACE TEMPORARY VIEW orders_enriched_tmp AS (
+   SELECT order_id, quantity, o.customer_id, c.profile:first_name as f_name, c.profile:last_name as l_name,
+         cast(from_unixtime(order_timestamp, 'yyyy-MM-dd HH:mm:ss') AS timestamp) order_timestamp, books
+   FROM orders_bronze_tmp o
+   INNER JOIN customers_lookup c
+   ON o.customer_id = c.customer_id
+   WHERE quantity > 0)
+```
+
+7. We call the `.writeStream` to write to the silver table with the combined, enriched data
+
+```python
+(spark.table("orders_enriched_tmp")
+      .writeStream
+      .format("delta")
+      .option("checkpointLocation", "dbfs:/mnt/demo/checkpoints/orders_silver")
+      .outputMode("append")
+      .table("orders_silver"))
+```
+- Reminder: open connection
+- Reminder: this wouldn't work if we had tried to use orders_bronze table instead of orders_bronze_tmp above
+
+8. `SELECT * FROM orders_silver` returns all data
+
+#### Gold Table
+
+9. Again for the same reason as above, we need to put data from the static `orders_silver` table into a streaming temporary view
+
+```python
+(spark.readStream
+  .table("orders_silver")
+  .createOrReplaceTempView("orders_silver_tmp"))
+```
+
+10. We want to aggregate - business need is: "we want the daily number of books for each customer"
+
+```sql
+%sql
+CREATE OR REPLACE TEMP VIEW daily_customer_books_tmp AS (
+  SELECT customer_id, f_name, l_name, date_trunc("DD", order_timestamp) order_date, sum(quantity) books_counts
+  FROM orders_silver_tmp
+  GROUP BY customer_id, f_name, l_name, date_trunc("DD", order_timestamp)
+  )
+```
+
+11. Now we'll write the aggregated data into a gold table called `daily_customer_books`
+
+```python
+(spark.table("daily_customer_books_tmp")
+      .writeStream
+      .format("delta")
+      .outputMode("complete")
+      .option("checkpointLocation", "dbfs:/mnt/demo/checkpoints/daily_customer_books")
+      .trigger(availableNow=True)
+      .table("daily_customer_books"))
+```
+- Note that the stream stopped on its own (normally it wouldn't!)
+	- This is because all of the data was processed in micro batches, as specified by the `availableNow=True` attribute
+		- We have effectively combined streaming and batch workloads in the same pipeline
+	- "complete" `outputMode` to rewrite the entire set of records each time our logic runs
+		- Note: because of this (table being updated or overwritten), it's no longer valid for streaming, so we can't read a stream from this gold table
+
+12. Now, any data loaded into our original source directory will run through the bronze, silver layers, until the gold layer
+	- Again need to re-run the stream query for the gold layer since it's a batch job (via the `availableNow` syntax)
+
+
+#### Use Case Reminder
+
+- Bronze - raw data
+- Silver - more refined view of data, joined and enriched fields
+- Gold - business-driven aggregated fields
 
 
 # Production Pipelines
