@@ -224,12 +224,14 @@ CREATE table pets_external LOCATION 'dbfs:/tritchie_external/pets';
 	- Generally, as good practice, you don't want to partition
 - Location
 	- Remember LOCATION above to create an external table
-- Table Constraints
+
+#### Table Constraints
 	- NOT NULL and CHECK constraints
 	- When applying these, there must not be any data that already violates them
 	- `ALTER TABLE table_1 ADD CONSTRAINT valid_date CHECK (date > '2025-01-01')`
 	- `ALTER TABLE table_1 ADD CONSTRAINT valid_date CHECK (date IS NOT NULL)`
-- Cloning delta lake tables
+
+#### Cloning delta lake tables
 	- Deep clone 
 		- Fully copies data + metadata from a source to target
 		`CREATE TABLE table_clone DEEP CLONE source_table`
@@ -350,7 +352,7 @@ CREATE TABLE table_name
 - Better, explicit way: Registering Tables on External Data Sources
 	- External table
 	- Non-Delta table!
-	- **Remember: if there's a LOCATION, it's a non-delta table**
+	- **Remember: if there's a USING CSV, it's a non-delta table**, (USING DELTA) with no OPTIONS for delta
  - Creates a table schema that points to the data stored at the given location. Querying the table reads from the CSV file at runtime.
 
 ```
@@ -554,7 +556,7 @@ ON o.book.book_id = b.book_id;
 
 SELECT * FROM orders_enriched
 ```
-- `o` returns order_id, order_timestamp, etc. from the orders table along with an exploded array (`[{"book_id":104, ...}, {"book_id":104, ...}]` becomes {"book_id":104, ...}, {"book_id":104, ...} in separate columns)
+- `o` returns order_id, order_timestamp, etc. from the orders table along with an exploded array (`[{"book_id":104, ...}, {"book_id":104, ...}]` becomes {"book_id":104, ...}, {"book_id":104, ...} in separate rows)
 - Then from `books`, for each book we grab the title, author name, and category, all the columns
 - Match the two on `book_id`
 
@@ -739,14 +741,13 @@ RETURN CASE
 - In Python, you can read a stream and write the data to the file system
 ```python
 streamDf = spark.readStream
-						.table("Input_Table")
+	.table("Input_Table")
 
-streamDF.table("Temp_Input_Table_View")
-			.writeStream
-			.trigger(processingTime="2 minutes")
-			.outputMode("append")
-			.option("checkpointLocation", "/path")
-			.table("Output_Table")
+streamDF.writeStream
+	.trigger(processingTime="2 minutes")
+	.outputMode("append")
+	.option("checkpointLocation", "/path")
+	.table("Output_Table")
 ```
 <br>
 
@@ -838,7 +839,7 @@ SELECT * FROM author_counts_temp_vw
 	.table("author_counts"))
 	.awaitTermination()
 ```
-- We use the `availableNow=True` trigger to take all records and insert them in one batch, and will stop on its own after execution
+- We use the `availableNow=True` trigger to take all records and insert them micro batches, and will stop on its own after execution
 - Reminder that outputMode "complete" will overwrite the entire target table
 - `awaitTermination` blocks the thread to run sync until this has finished
 
