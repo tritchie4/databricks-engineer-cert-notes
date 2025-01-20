@@ -1077,29 +1077,197 @@ CREATE OR REPLACE TEMP VIEW daily_customer_books_tmp AS (
 # Production Pipelines
 
 
+### Delta Live Tables (Hands On)
+
+- Framework for building reliable data processing pipelines
+- DLT pipelines are implemented/driven using notebooks
+
+`CREATE OR REFRESH STREAMING LIVE TABLE orders_raw`
+
+- `LIVE` - this is going to be a delta live table for a pipeline
+- `STREAMING` - the DATA SOURCE is a stream (not a static file or batch table)
+
+- Similarly.. 
+
+  1. `cloud_files` is used for streaming or incremental data loading
+```sql
+SELECT * 
+FROM cloud_files("${datasets.path}/orders-json-raw", "json",
+                 map("cloudFiles.inferColumnTypes", "true"))
+```
+
+  2. Whereas, "SELECT * FROM json.\`${datasets.path}/customers-json\`" is for static data loading, one time batch read
+
+- Put these together and you have
+
+```sql
+CREATE OR REFRESH STREAMING LIVE TABLE orders_raw
+COMMENT "The raw books orders, ingested from orders-raw"
+AS SELECT * FROM cloud_files("${datasets.path}/orders-json-raw", "json",
+                             map("cloudFiles.inferColumnTypes", "true"))
+```
+
+- Makes up **Bronze** layer
+
+- Then you have the **Silver** layer which is a refined copy of data from the bronze layer
+	- Data cleansing and enrichment
+
+```sql
+CREATE OR REFRESH STREAMING LIVE TABLE orders_cleaned (
+  CONSTRAINT valid_order_number EXPECT (order_id IS NOT NULL) ON VIOLATION DROP ROW
+)
+COMMENT "The cleaned books orders with valid order_id"
+AS
+  SELECT order_id, quantity, o.customer_id, c.profile:first_name as f_name, c.profile:last_name as l_name,
+         cast(from_unixtime(order_timestamp, 'yyyy-MM-dd HH:mm:ss') AS timestamp) order_timestamp, o.books,
+         c.profile:address:country as country
+  FROM STREAM(LIVE.orders_raw) o
+  LEFT JOIN LIVE.customers c
+    ON o.customer_id = c.customer_id
+```
+- Quality control is exercised using the Constraint keyword
+	- DLT can collect stats on constraint violations!
+		- `DROP row` - Discard records that violate constraints
+		- `FAIL UPDATE` - Violated constraint causes pipeline to fail
+		- (no `ON VIOLATION`) - Records violating constraints kept but reported in metrics
+- You must use `LIVE` to refer to other live tables, and the `STREAM()` method to read streaming tables
+
+- Gold table
+
+```sql
+CREATE OR REFRESH LIVE TABLE cn_daily_customer_books
+COMMENT "Daily number of books per customer in China"
+AS
+  SELECT customer_id, f_name, l_name, date_trunc("DD", order_timestamp) order_date, sum(quantity) books_counts
+  FROM LIVE.orders_cleaned
+  WHERE country = "China"
+  GROUP BY customer_id, f_name, l_name, date_trunc("DD", order_timestamp)
+```
+
+- Pipeline Creation Screen notes
+	- 0 workers to create a single node cluster
+	- When running, Development mode allows you to reuse cluster, instead of spinning up a new cluster every run for Production mode
+<br>
+
+- If you forget the `LIVE` keyword, for example, the query will execute because it is "syntactically valid" but the pipeline will fail
+<br>
+
+#### Pipeline Log Directory
+
+- In the pipeline run, we saved to `/mnt/demo/dlt/demo_bookstore`
+- Now in this directory there are these subdirectories
+	- `/autoloader` -- 
+	- `/checkpoints` -- 
+	- `/system` -- Captures all the events associated with the pipeline, in the form of a delta table
+	- `/tables` -- Tables are stored here
+
+### Change Data Capture (not on exam)
+
+- CDC is the process of identifying changes made to data in the source + delivering those changes to the target (think your golf score deltas project)
+	- The changes could include inserted, updated, deleted records
+	- Changes consist of a timestamp when the change happened + operation (INSERT, UPDATE, DELETE)
+		- Think of these as two added columns to a table (row data + metadata)
+
+```sql
+CREATE OR REFRESH STREAMING LIVE TABLE target_table
+
+APPLY CHANGES INTO LIVE.target_table
+FROM STREAM(LIVE.cdc_feed_table)
+KEYS(key_field)
+APPLY AS DELETE WHEN operation_field = "DELETE"
+SEQUENCE BY sequence_field
+COLUMNS *
+```
+
+- `CREATE OR REFRESH STREAMING LIVE TABLE target_table` -- this HAS to be done first, `APPLY CHANGES` needs table to exist first
+- `APPLY CHANGES INTO LIVE.target_table` -- the target table into which the changes are applied
+- `FROM STREAM(LIVE.cdc_feed_table)` -- CDC table as a streaming source
+- `KEYS(key_field)` -- primary key fields (if key exists, update; otherwise insert)
+- `APPLY AS DELETE WHEN operation_field = "DELETE"` -- enables deletion behavior
+- `SEQUENCE BY sequence_field` -- allows records to be processed in order (even if they don't arrive as such)
+- `COLUMNS *` -- list of fields that should be added to the target live table
+<br>
+(note: target live table needs to already exist)
+
+- Default behavior is upsert data
+- `APPLY AS DELETE WHEN` is optional, but if you need it you need to hold its hand
+- Support applying changes as Slowly Changing Dimenion (SCD) Type 1 or Type 2
+	- Type 1 means each unique key will have at most 1 record (updates overwrite original information)
+<br>
+
+- Cannot perform streaming queries against the table, because this operation breaks the append-only requirements for streaming table sources
+- So whenever you have a Silver layer table that has `APPLY CHANGES INTO`, it cannot be streamed from
+<br>
+
+- Can have DLT live views, they are scoped to the DLT pipeline they are a part of, temporary
+`CREATE LIVE VIEW`
+
+- LIVE tables may be referenced by any other notebook
+
+### Jobs (Hands On)
+
+- Orchestrate multiple tasks
+- Task 1: land new data
+  Task 2: Run DLT pipeline
+  Task 3: Run pipeline
+
+- For a task, you select the cluster, can use yours but Job cluster must be used for Production
+- Can configure schedule for jobs
+- Can set email notification here
+- Permissions determine what users can run, manage, view the jobs (not a group for Owner)
 
 
+### Databricks SQL
 
-
-
-
-
-
-
-
-
-
-
-
+- "DBSQL" - dataware house allows you to run SQL at scale
+- A "SQL Warehouse" is the compute power of DBSQL
+	- An SQL engine built on a Spark cluster
+- Queries can be written and have their results added to a dashboard, refreshed at a certain time/day interval, and have their results interpreted as a widget (graph) in the dashboard
+- Can save queries
+- Can fire off alerts if saved query result meets a certain threshold
 
 # Data Governance
 
+### Data Objects Privileges
+
+- Data governance model
+- Manage permissions for data objects
+
+#### Data governance model
+
+- Programmatically grant, deny, and revoke access to data objects in Spark SQL
+- `GRANT <privilege> ON <object> <object-name> TO <user or group>`
+- `GRANT SELECT ON TABLE my_table TO user_1@company.com`
+  - `<privilege>` may be: SELECT, MODIFY, CREATE, READ_METADATA, USAGE, ALL PRIVILEGES
+  	- USAGE allows access to catalog the object but that's it, not even select it
+  - `<object>` may be: CATALOG, SCHEMA, TABLE, VIEW, FUNCTION, ANY FILE (underlying file system)
+  - Only the databricks administrator or the object owner can grant permissions on an object
+- Owner breaks down into..
+	- Catalog owner (grant access to catalog)
+	- Database owner for database
+	- Etc...
+- `GRANT`, `DENY`, `REVOKE` permissions, as well as `SHOW GRANTS`
+
+
+### Managing Permissions (Hands On)
+
+`GRANT SELECT, MODIFY, READ_METADATA, CREATE ON SCHEMA hr_db TO hr_team;`
+<br>
+*But* you have to have `GRANT USAGE ON SCHEMA hr_db TO hr_team` because otherwise they won't be able to perform any _action_ on a database object - USAGE needs to be granted for catalogs or schemas
+<br>
+
+`GRANT SELECT ON VIEW hr_db.paris_employees_vw TO \`adam@mycompany.com\``
+
+`SHOW GRANTS ON <object>`
 
 
 
+### Unity Catalog
 
-
-
+- Centralized governance for data and AI
+- Built-in data search and discovery
+- Automated lineage
+- No hard migraiton required
 
 
 
