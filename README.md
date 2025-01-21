@@ -237,11 +237,13 @@ CREATE table pets_external LOCATION 'dbfs:/tritchie_external/pets';
 	`CREATE TABLE table_clone DEEP CLONE source_table`
 	- Can take a long time for a large dataset
 	- A complete separate copy of an original table
+	- Copies data files
 - Shallow clone
 	- Reference to original table, think of it as a snapshot
 	- No original table history
 	- Storage efficient since there's just one source of truth for data (original table), UNTIL shallow clone is modified
-	- Independent once copied! 
+	- References original data files - changes to data files for original will affect new one
+	- Only metadata is copied
 - In either case, data modifications will not affect the source
 
 ### Views
@@ -720,12 +722,13 @@ RETURN CASE
 	- Events queued in a pub/sub messaging feed
 
 - Processing is done 2 ways
-	1. Reprocess entire source dataset each time
+	1. Reprocess entire source dataset each time, not what we are analyzing here
 	2. Only process thse new data added since last update
-		- Structured Streaming 
+		- Spark Structured Streaming 
 
 #### Spark Structured Streaming
 
+- Reads only new records or modifications from the source, which means it processes data incrementally. The new data since the last micro-batch or trigger is processed without re-reading the entire dataset
 - Takes data from infinite data source and puts it incrementally into a data sink
 - The data source is treated as a table
 - Data sink is a durable file system - files and tables
@@ -771,7 +774,7 @@ streamDF.writeStream
 		- Streaming agent can resume from where it left off - it uses write-ahead logs to record offset range of data being processed during each trigger interval, for tracking stream progress
 	- Data processing guaranteed to happen exactly-once, streaming sinks are idempotent
 		- Assumes repeatable datasource (like cloud)
-- Unsupported
+- Unsupported on the output streaming table (`Output_Table`)
 	- Sorting
 	- Deduplication 
 
@@ -853,10 +856,15 @@ SELECT * FROM author_counts_temp_vw
 
 - `COPY INTO` -- SQL command that allows users to load data from a file location into a Delta table
 - Will only load new files from the source location, skipping already-loaded files
+- **Benefit**: Best for batch loading files to delta tables
 
 #### Auto Loader
 
-- uses Structured Streaming to efficiently process data files as they arrive in storage
+- Reminder: Spark Structured Streaming takes data from infinite data source and puts it incrementally into a data sink
+	- The data source is treated as a table
+- Auto Loader is built on top of Spark Structured Streaming, uses  source called `cloudFiles`
+	- Given an input directory path on the cloud file storage, the `cloudFiles` source automatically processes new files as they arrive, with the option of also processing existing files in that directory
+- **Benefit**: Best for automated, continuous ingestion of new files to delta tables
 - `cloudFiles` (see below) == Auto Loader!
 	- Load billions of files
 	- Near real-time ingestion of millions of files per hour
