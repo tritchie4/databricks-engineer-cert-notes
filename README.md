@@ -226,23 +226,23 @@ CREATE table pets_external LOCATION 'dbfs:/tritchie_external/pets';
 	- Remember LOCATION above to create an external table
 
 #### Table Constraints
-	- NOT NULL and CHECK constraints
-	- When applying these, there must not be any data that already violates them
-	- `ALTER TABLE table_1 ADD CONSTRAINT valid_date CHECK (date > '2025-01-01')`
-	- `ALTER TABLE table_1 ADD CONSTRAINT valid_date CHECK (date IS NOT NULL)`
+- NOT NULL and CHECK constraints
+- When applying these, there must not be any data that already violates them
+- `ALTER TABLE table_1 ADD CONSTRAINT valid_date CHECK (date > '2025-01-01')`
+- `ALTER TABLE table_1 ADD CONSTRAINT valid_date CHECK (date IS NOT NULL)`
 
 #### Cloning delta lake tables
-	- Deep clone 
-		- Fully copies data + metadata from a source to target
-		`CREATE TABLE table_clone DEEP CLONE source_table`
-		- Can take a long time for a large dataset
-		- A complete separate copy of an original table
-	- Shallow clone
-		- Reference to original table, think of it as a snapshot
-		- No original table history
-		- Storage efficient since there's just one source of truth for data (original table), UNTIL shallow clone is modified
-		- Independent once copied! 
-	- In either case, data modifications will not affect the source
+- Deep clone 
+	- Fully copies data + metadata from a source to target
+	`CREATE TABLE table_clone DEEP CLONE source_table`
+	- Can take a long time for a large dataset
+	- A complete separate copy of an original table
+- Shallow clone
+	- Reference to original table, think of it as a snapshot
+	- No original table history
+	- Storage efficient since there's just one source of truth for data (original table), UNTIL shallow clone is modified
+	- Independent once copied! 
+- In either case, data modifications will not affect the source
 
 ### Views
 
