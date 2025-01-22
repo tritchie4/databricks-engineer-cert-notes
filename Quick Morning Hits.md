@@ -3,8 +3,9 @@
 - CTAS
 - CRTAS
 
-### Unity catalog - Data Access control, Access Audit, Data Lineage, and Data discovery
+### Unity catalog 
 
+- Data Access control, Access Audit, Data Lineage, and Data discovery
 - Holds workspaces
 
 ### Access Controls 
