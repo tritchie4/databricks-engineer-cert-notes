@@ -38,6 +38,10 @@ So..
 - Runtime is the image of the VM
 - You can select the configuration separately for the worker and driver nodes
 - Creating the cluster has Azure allocate the required VM's for you
+- **Cluster Pool** - a reserve of cluster nodes
+	- Allows for reuse, ready to use instances, reduces start-up time
+	- Helps with the annoying waits!
+	- "An automated report needs to be refreshed as quickly as possible."
 
 ### Notebook
 
@@ -72,6 +76,7 @@ Two types of files in storage:
   - JSON file
 - Delta Lake creates a new file for updates
 - Will make further updates in a NEW file (parquet file) with those updates rather than updating existing data file it last created
+- All of the data is broken down into one or many parquet files, log files are broken down into one or many JSON files, and each transaction creates a new data file(s) and log file
 - The Delta Log is only concerned with the latest file
 - takeaway: Delta Lake guarantees that you will always get the most recent version of the data
 - Data log enables ACID transactions to object storage
@@ -467,6 +472,7 @@ SELECT * FROM books
   	- Note theres no `AS`
   	- This overwrites the data, but not the table structure
   	- If you try an `INSERT OVERWRITE` with different columns (`AS SELECT *, current_timestamp()`) it will throw a schema mismatch error
+  	- Rare exception that you can update the schema with INSERT OVERWRITE if `spark.databricks.delta.schema.autoMerge.enabled` is set true
 
 #### Appending
 
@@ -754,7 +760,8 @@ streamDF.writeStream
 ```
 <br>
 
-- `.trigger(processingTime="2 minutes")` -- How often to process the data (default every half second)
+
+- `.trigger(processingTime="2 minutes")` -- Process the data in batch mode (default every half second)
 - `.trigger(once=True)` -- process all available data in a single batch, then stop
 - `.trigger(availableNow=True)` -- process all available data in micro batches, then stop
 <br>
@@ -855,16 +862,19 @@ SELECT * FROM author_counts_temp_vw
 #### COPY INTO
 
 - `COPY INTO` -- SQL command that allows users to load data from a file location into a Delta table
-- Will only load new files from the source location, skipping already-loaded files
+- Will only load new files from the source location, skipping already-loaded files = idempotent!
 - **Benefit**: Best for batch loading files to delta tables
+- Copy Into just supports directory listing ingestion method
 
 #### Auto Loader
 
+- Also idempotent!
 - Reminder: Spark Structured Streaming takes data from infinite data source and puts it incrementally into a data sink
 	- The data source is treated as a table
 - Auto Loader is built on top of Spark Structured Streaming, uses  source called `cloudFiles`
 	- Given an input directory path on the cloud file storage, the `cloudFiles` source automatically processes new files as they arrive, with the option of also processing existing files in that directory
 - **Benefit**: Best for automated, continuous ingestion of new files to delta tables
+- Auto Loader supports directory listing and file notification (queue subscriber thing) ingestion methods
 - `cloudFiles` (see below) == Auto Loader!
 	- Load billions of files
 	- Near real-time ingestion of millions of files per hour
