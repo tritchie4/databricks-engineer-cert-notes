@@ -1,0 +1,68 @@
+1  E
+2  A*
+3  D
+Cx4  E
+5  C
+6  B (but thought A too)*	notebooks features
+7  E
+Bx8  A*
+9  B
+10 C
+11 B
+12 C
+13 E*
+14 A
+Ax15 C* (is there something sneaky for D?)
+16 A* (again, sneaky)
+Bx17 E*
+18 C
+19 A (review outer join/inner join visual)
+20 D
+21 B (huh.. from arrays?)
+22 A
+23 A
+24 D
+25 A
+26 A (remind yourself of once=True, availableNow=True - the difference, need a trick)
+27 E
+28 C
+29 E* (put this into chatgpt, "aggregaged" = what? gold?)
+30 D
+31 C
+32 A
+Bx33 A (look at UI for pipelines)
+34 B
+35 A
+36 D (but ask about continuously vs set intervals)
+37 D (retry policy at Task level?)
+38 A
+39 C*
+Cx40 E* (there is apparently a SQL endpoint's page)
+41 B
+42 D (where do dashboards fit into DBXSQL vs ELT)
+Dx43 C* (no clue) 
+44 C
+45 A
+
+job cluster vs all-purpose cluster
+****DLT*****
+****JOBS****
+****DBXSQL**
+
+84%
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

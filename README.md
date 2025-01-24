@@ -47,6 +47,7 @@ So..
 
 - You can run different languages in different cells
 - Notebok's default might be python, in that case for SQL you need magic command, %sql
+- Can real-time coauthor notebooks!
 - Magic commands
 	- %sql, %md, etc.
 	- %run lets you run another notebook
@@ -69,7 +70,7 @@ Two types of files in storage:
 - Operates using Spark
   - You interact with Delta Lake tables most commonly through Spark SQL or Spark DataFrames within a Spark environment
 - storage framework that brings reliability to data storage for data lakes
-- open-source technology, storage framework/layer (NOT a format), enabling building lakehouse
+- open-source and open-format technology, storage framework/layer, enabling building lakehouse
 - Delta Lake is on the Cluster
 - Writes to Storage a Transaction Log - ordered records of every transaction on a table (think as bookmarks)
 - Spark checks the Transaction/Delta Log to receive data

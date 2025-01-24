@@ -65,57 +65,26 @@ create branch, pull, push, merge, rebase, clone
 ### Jobs
 
 - Ways to schedule.. Immediate, CRON, Continuous, when new files arrive
+- For non-prod, you can use a shared cluster, but for production, you must use a "job" cluster (again think butler)
+- Permissions (access control): Can manage in the Jobs page in the Permissions pane
 
 ### DBXSQL
 
 - Can set a schedule to automatically refresh a query
-
+- INSERT INTO
+- UPDATE
+- MERGE INTO
+- DELETE
+- DROP
+- DESCRIBE <table>
+- DESCRIBE DATABASE <database>
 
 ### DLT can collect stats on constraint violations!
 
 - DROP row - Discard records that violate constraints
 - FAIL UPDATE - Violated constraint causes pipeline to fail
 - (no ON VIOLATION) - Records violating constraints kept but reported in metrics
+<br>
 
-
-WE MUST REVIEW PERMISSIONS
-7
-11
-14 - default writeStream .output field?
-20 - jobs! how to schedule? different ways
-22 - cluster pool!?
-23
-26 - remind on parquet vs log files
-29
-33 - checkpointing vs write-ahead
-34 - "directory listing"?
-42 - collaborate in real time
-
-
-8048772808
-
-
-
------------------------------------
-
-
-question 6
-7
-9
-12
-14
-15
-16
-INSERT OVERWRITE VS MERGE INTO
-18	- copy into
-19 - pyspark sql
-26
-27 - auto loader
-28 - ON VIOLATION add row
-31 - python syntax?
-34 - Review DLT rules
-36
-38 - Need to really review DBSQL stuff
-39 - review Jobs!
-43 - Permissiosn = data studio or explorer? UI of DBX
-44 - Need to review privs
+- Query a DLT table using `LIVE.`
+- Create a `STREAMING` table using CREATE STREAMING and FROM STREAM(LIVE.whatever)
