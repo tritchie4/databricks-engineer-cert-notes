@@ -1292,21 +1292,3 @@ COLUMNS *
 
 
 
-
-
-
-
-
-
-
-# Certification Overview
-
-
-
-
-
-
-
-
-
-
